@@ -1,0 +1,16 @@
+name: Message Sender Openscop
+type: module
+description: "Module permetant d'envoyer un mail lors d'un update ou insert de node/comment, aux utilisateurs abonnés a ce post/sujet. Avec l'aide du message
+stack et swiftmiller. Inspiré du module message_integration de Lullabot"
+core_version_requirement: ^8 || ^9
+package: Message
+dependencies:
+  - message:message
+  - message_notify:message_notify
+  - message_subscribe:message_subscribe
+  - swiftmailer:swiftmailer
+  - mailsystem:mailsystem
+  - queue_throttle:queue_throttle
+  - token:token
+  - drupal:node
+  - drupal:comment

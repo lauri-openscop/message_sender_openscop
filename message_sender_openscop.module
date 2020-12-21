@@ -1,0 +1,111 @@
+<?php
+
+/**
+ * @file
+ * Holds hook implementation for the Custom Message Integration module.
+ */
+
+use Drupal\node\Entity\Node;
+use Drupal\comment\Entity\Comment;
+use Drupal\message\Entity\Message;
+
+/**
+ * Implementation of hook_cron().
+ *
+ * Fix repeating media error messages in email.
+ *
+ * The following error is repeated for every image sent in queued emails,
+ * once 20 images have been rendered.
+ *  - "During rendering of embedded media: recursive rendering detected..."
+ *
+ * The problem is core refuses to render the same image more than 20 times in
+ * one session, even if it's to create content for different users. This
+ * happens when emails are sent all at once during cron.
+ *
+ * The workaround is to use queue_throttle to limit the number of emails sent
+ * in a single session. After experimentation, more than 9 items sent at once
+ * may start to trigger errors.
+ *
+ * @see https://www.drupal.org/project/drupal/issues/2940605
+ */
+function message_sender_openscop_cron() {
+  $options = [
+    'items' => 9,
+    'unit' => 'minute',
+    'time-limit' => 30,
+  ];
+  \Drupal::service('queue_throttle.cron')->run('message_subscribe', $options);
+}
+/**
+ * Implements hook_preprocess_field().
+ */
+function message_sender_openscop_preprocess_field(&$variables) {
+  // Supprime le formulaire d'ajout de commentaire
+  $element = $variables['element'];
+  if ($element['#field_type'] == 'comment') {
+    if ($variables['element']['#view_mode'] == 'message') {
+      unset($variables['comment_form']);
+    }
+  }
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function message_sender_openscop_node_insert(Node $node) {
+
+  if (!$node->isPublished()) {
+    return;
+  }
+  $message = Message::create([
+    'template' => 'create_node',
+    'uid' => $node->getOwnerId(),
+  ]);
+  $message->set('field_node_reference', $node);
+  $message->set('field_published', $node->isPublished());
+  $message->save();
+  $subscribers = \Drupal::service('message_subscribe.subscribers');
+  $subscribers->sendMessage($node, $message);
+
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function message_sender_openscop_node_update(Node $node) {
+
+  if (!$node->isPublished()) {
+    return;
+  }
+
+  $message = Message::create([
+    'template' => 'update_node',
+    'uid' => $node->getOwnerId(),
+  ]);
+  $message->set('field_node_reference', $node);
+  $message->set('field_published', $node->isPublished());
+  $message->save();
+  $subscribers = \Drupal::service('message_subscribe.subscribers');
+  $subscribers->sendMessage($node, $message);
+
+}
+
+/**
+ * Implements hook_comment_insert().
+ */
+function message_sender_openscop_comment_insert(Comment $comment) {
+
+  $message = Message::create([
+    'template' => 'create_comment',
+    'uid' => $comment->getOwnerId(),
+  ]);
+  $message->set('field_comment_reference', $comment);
+  $message->set('field_published', $comment->isPublished());
+  $message->save();
+//  $owner = $comment->getOwner();
+
+  $subscribers = \Drupal::service('message_subscribe.subscribers');
+//  $subscribers[] = $owner;
+  $subscribers->sendMessage($comment, $message);
+}
+
